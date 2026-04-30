@@ -21,8 +21,8 @@ def _env_flag(name: str, default: str = 'false') -> bool:
     return os.getenv(name, default).strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-USE_EXTERNAL_GEOCODING = _env_flag('TRIP_PLANNER_USE_EXTERNAL_GEOCODING')
-USE_EXTERNAL_ROUTING = _env_flag('TRIP_PLANNER_USE_EXTERNAL_ROUTING')
+USE_EXTERNAL_GEOCODING = _env_flag('TRIP_PLANNER_USE_EXTERNAL_GEOCODING', 'true')
+USE_EXTERNAL_ROUTING = _env_flag('TRIP_PLANNER_USE_EXTERNAL_ROUTING', 'true')
 
 
 def _parse_start_time(data: dict) -> datetime:

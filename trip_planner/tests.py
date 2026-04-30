@@ -4,6 +4,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
+from .models import EldLogSheet
 
 from .services import build_trip_plan
 
@@ -47,6 +48,35 @@ class PlanTripApiTests(APITestCase):
         response = self.client.get('/api/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('endpoints', response.data)
+
+    def test_log_sheet_save_endpoint_persists_payload(self):
+        payload = {
+            'trip_form': {
+                'current_location': 'Dallas, TX',
+                'pickup_location': 'Oklahoma City, OK',
+                'dropoff_location': 'Denver, CO',
+                'cycle_used_hours': 24,
+            },
+            'driver_info': {
+                'carrier': 'Spotter Freight',
+                'vehicle': 'TRK-18',
+            },
+            'selected_log_index': 0,
+            'sheet_details': {
+                '0': {
+                    'remarks': 'Loaded and ready to roll',
+                    'shippingDocument': 'BOL-1234',
+                    'commodity': 'Produce',
+                }
+            },
+            'plan_result': {'daily_logs': []},
+        }
+
+        response = self.client.post('/api/log-sheets', payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['payload']['driver_info']['carrier'], 'Spotter Freight')
+        self.assertEqual(EldLogSheet.objects.count(), 1)
 
     def test_plan_trip_returns_full_backend_payload(self):
         response = self.client.post('/api/plan-trip', self.base_payload, format='json')

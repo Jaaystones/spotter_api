@@ -13,8 +13,8 @@ It is built with Django and Django REST Framework.
 ## What Is Implemented
 
 - Input validation for trip planning requests
-- Location resolution with network-first geocoding and deterministic fallback
-- Route resolution with external provider and local fallback
+- Location resolution with live geocoding and offline fallback only when the provider fails
+- Route resolution with live OSRM directions and fallback only when the provider fails
 - HOS-aware timeline generation
 - Fuel stop insertion every 1,000 miles
 - Pickup and dropoff insertion (60 minutes each)
@@ -50,8 +50,8 @@ It is built with Django and Django REST Framework.
 - DJANGO_CORS_ALLOWED_ORIGINS: comma-separated allowed origins
 - DJANGO_CSRF_TRUSTED_ORIGINS: comma-separated trusted origins
 - DATABASE_URL: Postgres connection string, typically your Supabase database URL for production
-- TRIP_PLANNER_USE_EXTERNAL_GEOCODING: true to enable live geocoding, false for deterministic fallback
-- TRIP_PLANNER_USE_EXTERNAL_ROUTING: true to enable live routing, false for deterministic fallback
+- TRIP_PLANNER_USE_EXTERNAL_GEOCODING: true by default to enable live geocoding, false to force deterministic fallback
+- TRIP_PLANNER_USE_EXTERNAL_ROUTING: true by default to enable live routing, false to force deterministic fallback
 
 ## Testing
 
@@ -138,7 +138,7 @@ If your project exposes direct DB host access, this format can be used:
 
 The app uses `DATABASE_URL` when available and falls back to SQLite for local development.
 
-If you want deterministic behavior during assessment demos, keep:
+If you want deterministic behavior during assessment demos, override these to false:
 
 - `TRIP_PLANNER_USE_EXTERNAL_GEOCODING=false`
 - `TRIP_PLANNER_USE_EXTERNAL_ROUTING=false`

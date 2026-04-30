@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from .models import EldLogSheet
+
 
 class TripRequestSerializer(serializers.Serializer):
     current_location = serializers.CharField(
@@ -35,3 +37,12 @@ class TripRequestSerializer(serializers.Serializer):
             raise serializers.ValidationError('Pickup and dropoff locations must be different.')
 
         return attrs
+
+
+class EldLogSheetSerializer(serializers.ModelSerializer):
+    payload = serializers.JSONField()
+
+    class Meta:
+        model = EldLogSheet
+        fields = ['id', 'created_at', 'payload']
+        read_only_fields = ['id', 'created_at']

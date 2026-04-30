@@ -3,7 +3,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import TripRequestSerializer
+from .models import EldLogSheet
+from .serializers import EldLogSheetSerializer, TripRequestSerializer
 from .services import build_trip_plan
 
 
@@ -39,6 +40,7 @@ class ApiInfoView(APIView):
                         'properties': {
                             'health': {'type': 'string'},
                             'plan_trip': {'type': 'string'},
+                            'log_sheets': {'type': 'string'},
                         },
                     },
                 },
@@ -54,6 +56,7 @@ class ApiInfoView(APIView):
                 'endpoints': {
                     'health': '/api/health',
                     'plan_trip': '/api/plan-trip',
+                    'log_sheets': '/api/log-sheets',
                 },
             },
             status=status.HTTP_200_OK,
@@ -109,3 +112,27 @@ class PlanTripView(APIView):
         serializer.is_valid(raise_exception=True)
         plan = build_trip_plan(serializer.validated_data)
         return Response(plan, status=status.HTTP_200_OK)
+
+
+class LogSheetView(APIView):
+    """Store an editable ELD log sheet draft."""
+
+    @extend_schema(
+        description='Persist an editable ELD log sheet draft in the database',
+        request={
+            'type': 'object',
+            'properties': {
+                'trip_form': {'type': 'object'},
+                'driver_info': {'type': 'object'},
+                'selected_log_index': {'type': 'integer'},
+                'sheet_details': {'type': 'object'},
+                'plan_result': {'type': 'object'},
+            },
+        },
+        responses={201: EldLogSheetSerializer},
+    )
+    def post(self, request):
+        serializer = EldLogSheetSerializer(data={'payload': request.data})
+        serializer.is_valid(raise_exception=True)
+        sheet = serializer.save()
+        return Response(EldLogSheetSerializer(sheet).data, status=status.HTTP_201_CREATED)
