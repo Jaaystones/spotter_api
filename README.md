@@ -302,6 +302,43 @@ Nested response contracts:
 6. Events are split into per-day logs.
 7. Summary metrics and assumptions are returned.
 
+**Implementation Summary**
+
+- **Views**:
+	- `ApiInfoView.get`: returns API metadata and available endpoint paths for discovery.
+	- `HealthCheckView.get`: lightweight health check that returns service status.
+	- `PlanTripView.post`: validates a trip request and returns a full trip plan payload produced by `build_trip_plan`.
+	- `LogSheetView.post`: accepts a draft ELD payload and persists it via the `EldLogSheet` model.
+
+- **Serializers**:
+	- `TripRequestSerializer`: validates request fields (location uniqueness, cycle hours bounds, optional start time).
+	- `EldLogSheetSerializer`: wraps a JSON `payload` for persistence and readback.
+
+- **Models**:
+	- `EldLogSheet`: simple model storing draft log payloads with `created_at` and `payload` fields.
+
+- **Core service functions (`trip_planner/services.py`)**:
+	- `_parse_start_time(data)`: normalizes the optional `trip_start_time` into a UTC-aware `datetime`.
+	- `_pseudo_geocode(location)`: deterministic fallback that maps a text label into approximate lat/lng for offline/deterministic runs.
+	- `_geocode_location(location)`: attempts live geocoding (Nominatim) with timeout and falls back to `_pseudo_geocode` on error.
+	- `_distance_miles(a, b)`: haversine-based distance calculation between two coordinate dicts.
+	- `_fetch_osrm_route(points)`: fetches route geometry and metrics from OSRM; returns `None` on failure.
+	- `_fallback_route(points)`: computes a simple LineString geometry and distance/duration from haversine estimates.
+	- `_resolve_route(points)`: uses OSRM if enabled otherwise falls back to haversine route.
+	- `_event_dict(...)`: small helper that formats a duty event dict (type, status, start/end, duration, location, notes).
+	- `PlannerState`: orchestrates timeline state during expansion of route into duty events:
+		- `__init__`: initializes counters and output lists.
+		- `_append_event`: creates an event, advances current time, and updates driving/on-duty/off-duty counters.
+		- `_add_stop`: appends an entry to the `stops` list matching an event.
+		- `_take_reset_break` / `_take_short_break_if_needed`: insert OFF_DUTY blocks for reset and mandatory breaks.
+		- `_ensure_capacity_for_on_duty`: enforces on-duty/shift constraints and forces reset breaks when needed.
+		- `add_on_duty_stop`: convenience for adding pickup/dropoff/fuel stops as ON_DUTY_NOT_DRIVING events.
+		- `drive_leg`: converts a leg distance into a sequence of DRIVING events, inserting breaks, resets, and fuel stops according to policy.
+	- `_split_events_by_day(events)`: splits multi-day events at midnight boundaries and aggregates totals by duty status per day.
+	- `build_trip_plan(data)`: the top-level orchestrator — geocodes points, resolves route, runs `PlannerState` to build events, stops, daily logs, and summary payload returned to the API.
+
+These service and planner pieces are intentionally deterministic when external services are disabled (controlled by environment flags) which makes local testing and demos reproducible.
+
 ## Route and Function Responsibility Map
 
 ### Routes and View Functions
