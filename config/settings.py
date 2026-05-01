@@ -13,11 +13,12 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 import sys
 import logging
+import socket
 from pathlib import Path
+from urllib.parse import urlparse
 
 import dj_database_url
 from dotenv import load_dotenv
-import psycopg2
 from django.db.utils import OperationalError
 
 logger = logging.getLogger(__name__)
@@ -116,6 +117,18 @@ def _sqlite_database(name: str) -> dict:
     }
 
 
+def _can_reach_database_host(database_url: str) -> None:
+    parsed = urlparse(database_url)
+    hostname = parsed.hostname
+    port = parsed.port or 5432
+
+    if not hostname:
+        raise ValueError('DATABASE_URL must include a hostname.')
+
+    with socket.create_connection((hostname, port), timeout=3):
+        return None
+
+
 def _database_config_or_sqlite(database_url: str) -> dict:
     global DATABASE_FALLBACK_TO_SQLITE, DATABASE_FALLBACK_MESSAGE
 
@@ -129,21 +142,20 @@ def _database_config_or_sqlite(database_url: str) -> dict:
             ssl_require=not DEBUG,
         )
 
-        connection = psycopg2.connect(database_url, connect_timeout=3)
-        connection.close()
+        _can_reach_database_host(database_url)
 
         DATABASE_FALLBACK_TO_SQLITE = False
         DATABASE_FALLBACK_MESSAGE = ''
 
         return database_config
-    except (OperationalError, psycopg2.OperationalError, OSError, ValueError) as exc:
+    except (OperationalError, OSError, ValueError) as exc:
         DATABASE_FALLBACK_TO_SQLITE = True
         DATABASE_FALLBACK_MESSAGE = f'Postgres database unavailable, falling back to SQLite: {exc}'
         return _sqlite_database(str(BASE_DIR / 'db.sqlite3'))
 
 
-    DATABASE_FALLBACK_TO_SQLITE = False
-    DATABASE_FALLBACK_MESSAGE = ''
+DATABASE_FALLBACK_TO_SQLITE = False
+DATABASE_FALLBACK_MESSAGE = ''
 
 if RUNNING_TESTS and not USE_DATABASE_URL_FOR_TESTS:
     DATABASES = {'default': _sqlite_database(':memory:')}

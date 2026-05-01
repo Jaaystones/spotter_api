@@ -4,6 +4,8 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 AVERAGE_SPEED_MPH = 55
 CYCLE_LIMIT_HOURS = 70
@@ -23,6 +25,26 @@ def _env_flag(name: str, default: str = 'false') -> bool:
 
 USE_EXTERNAL_GEOCODING = _env_flag('TRIP_PLANNER_USE_EXTERNAL_GEOCODING', 'true')
 USE_EXTERNAL_ROUTING = _env_flag('TRIP_PLANNER_USE_EXTERNAL_ROUTING', 'true')
+EXTERNAL_REQUEST_TIMEOUT_GEOCODING = float(os.getenv('TRIP_PLANNER_GEOCODING_TIMEOUT_SECONDS', '6'))
+EXTERNAL_REQUEST_TIMEOUT_ROUTING = float(os.getenv('TRIP_PLANNER_ROUTING_TIMEOUT_SECONDS', '8'))
+EXTERNAL_REQUEST_MAX_RETRIES = int(os.getenv('TRIP_PLANNER_EXTERNAL_MAX_RETRIES', '2'))
+EXTERNAL_REQUEST_BACKOFF_FACTOR = float(os.getenv('TRIP_PLANNER_EXTERNAL_BACKOFF_FACTOR', '0.3'))
+
+_external_session = requests.Session()
+_external_retry = Retry(
+    total=EXTERNAL_REQUEST_MAX_RETRIES,
+    connect=EXTERNAL_REQUEST_MAX_RETRIES,
+    read=EXTERNAL_REQUEST_MAX_RETRIES,
+    status=EXTERNAL_REQUEST_MAX_RETRIES,
+    backoff_factor=EXTERNAL_REQUEST_BACKOFF_FACTOR,
+    status_forcelist=(429, 500, 502, 503, 504),
+    allowed_methods=frozenset({'GET'}),
+    raise_on_status=False,
+    respect_retry_after_header=True,
+)
+_external_adapter = HTTPAdapter(max_retries=_external_retry)
+_external_session.mount('http://', _external_adapter)
+_external_session.mount('https://', _external_adapter)
 
 
 def _parse_start_time(data: dict) -> datetime:
@@ -59,11 +81,11 @@ def _geocode_location(location: str) -> dict:
         return _pseudo_geocode(location)
 
     try:
-        response = requests.get(
+        response = _external_session.get(
             'https://nominatim.openstreetmap.org/search',
             params={'q': location, 'format': 'json', 'limit': 1},
             headers={'User-Agent': 'spotter-trip-planner/1.0'},
-            timeout=6,
+            timeout=EXTERNAL_REQUEST_TIMEOUT_GEOCODING,
         )
         response.raise_for_status()
         payload = response.json()
@@ -96,10 +118,10 @@ def _fetch_osrm_route(points: list[dict]) -> dict | None:
     url = f'https://router.project-osrm.org/route/v1/driving/{coordinates}'
 
     try:
-        response = requests.get(
+        response = _external_session.get(
             url,
             params={'overview': 'full', 'geometries': 'geojson', 'steps': 'false'},
-            timeout=8,
+            timeout=EXTERNAL_REQUEST_TIMEOUT_ROUTING,
         )
         response.raise_for_status()
         payload = response.json()
