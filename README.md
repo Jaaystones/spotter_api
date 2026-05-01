@@ -138,6 +138,45 @@ If your project exposes direct DB host access, this format can be used:
 
 The app uses `DATABASE_URL` when available and falls back to SQLite for local development.
 
+Local development & secrets
+---------------------------
+
+- **Do not commit secrets.** Keep `backend/.env` out of source control. Use `backend/.env.example` as a template and copy it locally:
+
+```bash
+cp backend/.env.example backend/.env
+# Edit backend/.env and replace placeholders with your values
+```
+
+- **Rotate credentials** if you previously committed real secrets. Remove them from history (or rotate credentials) and replace with placeholders.
+
+- **Frontend env:** create or update `frontend/.env` to point to your backend during local development:
+
+```bash
+# frontend/.env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+- **Run locally** (recommended):
+
+```bash
+# Backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+cp backend/.env.example backend/.env
+# edit backend/.env with real values
+python backend/manage.py migrate
+python backend/manage.py runserver
+
+# Frontend
+cd frontend
+pnpm install
+pnpm dev
+```
+
+- **CI:** A GitHub Actions workflow has been added at `.github/workflows/ci.yml` to run backend tests and build the frontend.
+
 If you want deterministic behavior during assessment demos, override these to false:
 
 - `TRIP_PLANNER_USE_EXTERNAL_GEOCODING=false`

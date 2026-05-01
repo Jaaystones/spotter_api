@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: spotter-trip-planner-backend
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate
+    startCommand: gunicorn config.wsgi:application
+    autoDeploy: true
+    envVars:
+      - key: DJANGO_DEBUG
+        value: false
+      - key: DJANGO_ALLOWED_HOSTS
+        value: spotter-trip-planner-backend.onrender.com
+      - key: DJANGO_CORS_ALLOWED_ORIGINS
+        value: http://localhost:5173,http://127.0.0.1:5173,https://spotter-client.onrender.com
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: http://localhost:5173,http://127.0.0.1:5173,https://spotter-client.onrender.com
+      - key: TRIP_PLANNER_USE_EXTERNAL_GEOCODING
+        value: true
+      - key: TRIP_PLANNER_USE_EXTERNAL_ROUTING
+        value: true

@@ -12,10 +12,15 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 import sys
+import logging
 from pathlib import Path
 
 import dj_database_url
 from dotenv import load_dotenv
+import psycopg2
+from django.db.utils import OperationalError
+
+logger = logging.getLogger(__name__)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -103,25 +108,51 @@ WSGI_APPLICATION = 'config.wsgi.application'
 RUNNING_TESTS = 'test' in sys.argv
 USE_DATABASE_URL_FOR_TESTS = _env_flag('DJANGO_TEST_USE_DATABASE_URL')
 
-if RUNNING_TESTS and not USE_DATABASE_URL_FOR_TESTS:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': ':memory:',
-        }
+
+def _sqlite_database(name: str) -> dict:
+    return {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': name,
     }
+
+
+def _database_config_or_sqlite(database_url: str) -> dict:
+    global DATABASE_FALLBACK_TO_SQLITE, DATABASE_FALLBACK_MESSAGE
+
+    if not database_url or database_url.startswith('sqlite://'):
+        return dj_database_url.config(default=database_url, conn_max_age=600)
+
+    try:
+        database_config = dj_database_url.config(
+            default=database_url,
+            conn_max_age=600,
+            ssl_require=not DEBUG,
+        )
+
+        connection = psycopg2.connect(database_url, connect_timeout=3)
+        connection.close()
+
+        DATABASE_FALLBACK_TO_SQLITE = False
+        DATABASE_FALLBACK_MESSAGE = ''
+
+        return database_config
+    except (OperationalError, psycopg2.OperationalError, OSError, ValueError) as exc:
+        DATABASE_FALLBACK_TO_SQLITE = True
+        DATABASE_FALLBACK_MESSAGE = f'Postgres database unavailable, falling back to SQLite: {exc}'
+        return _sqlite_database(str(BASE_DIR / 'db.sqlite3'))
+
+
+    DATABASE_FALLBACK_TO_SQLITE = False
+    DATABASE_FALLBACK_MESSAGE = ''
+
+if RUNNING_TESTS and not USE_DATABASE_URL_FOR_TESTS:
+    DATABASES = {'default': _sqlite_database(':memory:')}
 else:
     default_database_url = os.getenv('DATABASE_URL', f'sqlite:///{BASE_DIR / "db.sqlite3"}')
     if RUNNING_TESTS and USE_DATABASE_URL_FOR_TESTS:
         default_database_url = os.getenv('DJANGO_TEST_DATABASE_URL', default_database_url)
 
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=default_database_url,
-            conn_max_age=600,
-            ssl_require=not DEBUG,
-        )
-    }
+    DATABASES = {'default': _database_config_or_sqlite(default_database_url)}
 
 
 # Password validation
@@ -188,6 +219,20 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
     'CONTACT': {'name': 'Support', 'email': 'support@spotter.com'},
+}
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
 }
 
 if not DEBUG:
